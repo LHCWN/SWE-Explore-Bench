@@ -22,8 +22,11 @@ CLIS = {
     "opencode": OpenCodeExplorer.config_filename,
     "deveco": DevEcoExplorer.config_filename,
 }
-VARIANTS = ("arkts", "arkts-no-mcp")
+#: `cpp` is minimal: read-only plus the Serena entry, no provider or model.
+LANGUAGES = ("arkts", "cpp")
+VARIANTS = tuple(name for lang in LANGUAGES for name in (lang, f"{lang}-no-mcp"))
 PROFILES = [(cli, variant) for cli in CLIS for variant in VARIANTS]
+ARKTS_PROFILES = [(cli, variant) for cli, variant in PROFILES if variant.startswith("arkts")]
 
 #: A leaf under a key that contains one of these words (as a whole word of a
 #: camelCase, snake_case or UPPER_CASE key, so "apiKey", "api_key", "API_KEY"
@@ -57,6 +60,10 @@ def load(cli: str, variant: str) -> dict:
     path = PROFILES_ROOT / cli / variant / CLIS[cli]
     assert path.is_file(), f"profile missing: {path}"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+#: `cpp-no-mcp` omits the server instead of disabling it.
+SERENA_PROFILES = [(cli, variant) for cli, variant in PROFILES if "mcp" in load(cli, variant)]
 
 
 def leaves(node, path=()):
@@ -98,7 +105,7 @@ def test_profile_carries_no_literal_credentials(cli, variant):
             )
 
 
-@pytest.mark.parametrize("cli,variant", PROFILES)
+@pytest.mark.parametrize("cli,variant", ARKTS_PROFILES)
 def test_profile_is_explicitly_read_only(cli, variant):
     permission = load(cli, variant)["permission"]
     for tool in DENIED_TOOLS:
@@ -110,7 +117,7 @@ def test_profile_is_explicitly_read_only(cli, variant):
     assert permission["doom_loop"] == "allow"
 
 
-@pytest.mark.parametrize("cli,variant", PROFILES)
+@pytest.mark.parametrize("cli,variant", ARKTS_PROFILES)
 def test_profile_hides_denied_tools_from_the_model(cli, variant):
     profile = load(cli, variant)
     for tool in DISABLED_TOOLS:
@@ -121,7 +128,7 @@ def test_profile_hides_denied_tools_from_the_model(cli, variant):
     assert "--project-from-cwd" in command
 
 
-@pytest.mark.parametrize("cli,variant", PROFILES)
+@pytest.mark.parametrize("cli,variant", SERENA_PROFILES)
 def test_serena_keeps_its_language_server_cache_across_runs(cli, variant):
     """Every run gets a fresh HOME, so without this Serena would reinstall
     the language server per benchmark instance."""
@@ -129,28 +136,31 @@ def test_serena_keeps_its_language_server_cache_across_runs(cli, variant):
     assert environment["SERENA_HOME"] == "{env:SWE_EXPLORE_SERENA_HOME}"
 
 
+@pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("cli", list(CLIS))
-def test_mcp_variant_seeds_the_serena_project_file(cli):
+def test_mcp_variant_seeds_the_serena_project_file(cli, language):
     """--project-from-cwd walks up the ancestors, so a checkout without its
     own project file would silently activate this repository instead."""
-    seed = PROFILES_ROOT / cli / "arkts" / CHECKOUT_SEED_DIR / ".serena" / "project.yml"
+    seed = PROFILES_ROOT / cli / language / CHECKOUT_SEED_DIR / ".serena" / "project.yml"
     assert seed.is_file()
     text = seed.read_text(encoding="utf-8")
+    assert re.search(r"(?m)^language_servers: \[\w+\]$", text)
     assert "read_only: true" in text
     for tool in ("replace_in_files", "rename_symbol", "write_memory"):
         assert f"- {tool}" in text
-    assert not (PROFILES_ROOT / cli / "arkts-no-mcp" / CHECKOUT_SEED_DIR).exists()
+    assert not (PROFILES_ROOT / cli / f"{language}-no-mcp" / CHECKOUT_SEED_DIR).exists()
 
 
-def test_both_mcp_variants_seed_the_same_project_file():
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_both_mcp_variants_seed_the_same_project_file(language):
     files = [
-        (PROFILES_ROOT / cli / "arkts" / CHECKOUT_SEED_DIR / ".serena" / "project.yml")
+        (PROFILES_ROOT / cli / language / CHECKOUT_SEED_DIR / ".serena" / "project.yml")
         .read_bytes() for cli in CLIS
     ]
     assert files[0] == files[1]
 
 
-@pytest.mark.parametrize("cli,variant", PROFILES)
+@pytest.mark.parametrize("cli,variant", SERENA_PROFILES)
 def test_serena_runs_headless(cli, variant):
     """A fresh HOME resets Serena's config, whose defaults open a dashboard
     browser tab and a log window on every launch."""
@@ -160,14 +170,14 @@ def test_serena_runs_headless(cli, variant):
         assert command[command.index(flag) + 1:command.index(flag) + 2] == ["false"], flag
 
 
-@pytest.mark.parametrize("cli,variant", PROFILES)
+@pytest.mark.parametrize("cli,variant", ARKTS_PROFILES)
 def test_profile_never_asks(cli, variant):
     """A headless run must not stall on an approval prompt."""
     for key_path, value in leaves(load(cli, variant)["permission"]):
         assert value != "ask", "/".join(map(str, key_path))
 
 
-@pytest.mark.parametrize("cli,variant", PROFILES)
+@pytest.mark.parametrize("cli,variant", ARKTS_PROFILES)
 def test_profile_routes_the_model_through_the_proxy_env(cli, variant):
     profile = load(cli, variant)
     provider_id, model_id = profile["model"].split("/", 1)
@@ -182,7 +192,7 @@ def test_profile_routes_the_model_through_the_proxy_env(cli, variant):
     assert limit["context"] > 0 and limit["output"] > 0
 
 
-@pytest.mark.parametrize("cli,variant", PROFILES)
+@pytest.mark.parametrize("cli,variant", ARKTS_PROFILES)
 def test_profile_stays_offline_apart_from_the_model_endpoint(cli, variant):
     profile = load(cli, variant)
     assert profile["share"] == "disabled"
@@ -190,13 +200,17 @@ def test_profile_stays_offline_apart_from_the_model_endpoint(cli, variant):
     assert profile["snapshot"] is False
 
 
+@pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("cli", list(CLIS))
-def test_variants_differ_only_in_mcp_enabled(cli):
-    with_mcp = load(cli, "arkts")
-    without_mcp = load(cli, "arkts-no-mcp")
+def test_variants_differ_only_in_mcp_enabled(cli, language):
+    with_mcp = load(cli, language)
+    without_mcp = load(cli, f"{language}-no-mcp")
     assert with_mcp["mcp"]["serena"]["enabled"] is True
-    assert without_mcp["mcp"]["serena"]["enabled"] is False
-    with_mcp["mcp"]["serena"]["enabled"] = False
+    if "mcp" in without_mcp:
+        assert without_mcp["mcp"]["serena"]["enabled"] is False
+        with_mcp["mcp"]["serena"]["enabled"] = False
+    else:
+        del with_mcp["mcp"]
     assert with_mcp == without_mcp
 
 
@@ -204,3 +218,21 @@ def test_variants_differ_only_in_mcp_enabled(cli):
 def test_opencode_and_deveco_profiles_share_one_shape(variant):
     """DevEco Code is an OpenCode fork with the same config schema."""
     assert load("opencode", variant) == load("deveco", variant)
+
+
+@pytest.mark.parametrize("variant", ("cpp", "cpp-no-mcp"))
+@pytest.mark.parametrize("cli", list(CLIS))
+def test_cpp_profile_is_read_only_and_never_asks(cli, variant):
+    """Each of these defaults to "ask" (or to a prompt for the user) unless
+    pinned: .env reads, paths outside the checkout and questions."""
+    assert load(cli, variant)["permission"] == {
+        "read": "allow", "external_directory": "deny", "question": "deny",
+        "edit": "deny", "bash": "deny",
+    }
+
+
+@pytest.mark.parametrize("cli", list(CLIS))
+def test_languages_share_the_serena_command(cli):
+    first = load(cli, LANGUAGES[0])
+    for language in LANGUAGES[1:]:
+        assert load(cli, language)["mcp"]["serena"]["command"] == first["mcp"]["serena"]["command"]

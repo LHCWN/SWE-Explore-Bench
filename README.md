@@ -127,6 +127,27 @@ uv run python fetch_repos.py list-repos \
   --commit-map commit_map.json
 ```
 
+#### C/C++ subset
+
+The released benchmark includes C/C++ instances (`dataset: multilingual`) whose repositories have no trajectories to fetch from. Build the subset from the released file instead; none of the generated files are committed.
+
+```bash
+# Select the C/C++ instances and attach their issue text as `problem_statement`.
+uv run python build_language_bench.py data/SWE-Explore-Bench/bench.final.public.jsonl \
+  --language cpp -o bench.cpp.jsonl
+
+# Map them to base commits, then fetch the snapshots.
+uv run python build_commit_map.py build --no-verified --no-rebench --multilingual -o commit_map.json
+uv run python fetch_repos.py clone-bench \
+  --bench bench.cpp.jsonl \
+  --commit-map commit_map.json \
+  --repos-dir repos
+```
+
+Run it with `--bench bench.cpp.jsonl`; no `--issue-map` is needed. The `opencode` and `deveco` profiles for it are under `configs/cli_agents/<cli>/cpp`; they have no provider or model, so add your own to a copy of one (see `configs/cli_agents/README.md`).
+
+`problem_statement` is part of the benchmark file, so `bench_sha256` covers it; an `--issue-map` entry for the same instance overrides it. The subset is for the agentic explorers: the retrieval baselines (`bm25`, `tfidf`, `rag`) only index the file types in `explorers/source_files.py`, which exclude C/C++ sources, so their numbers on it are not meaningful.
+
 ### 4. Run an explorer
 
 `eval_runner.py` runs registered explorers over a benchmark file, supports resume, and can evaluate multiple `top_k` budgets.
@@ -240,8 +261,8 @@ Agent explorers can be routed through one OpenAI-compatible endpoint with `--aca
 
 `opencode` and `deveco` (DevEco Code, a HarmonyOS fork of OpenCode) take a
 config directory via `--opencode-config-dir` / `--deveco-config-dir`.
-Credential-free, read-only example profiles for ArkTS projects, with semantic
-navigation over MCP switchable on and off, are committed under
+Credential-free, read-only example profiles for ArkTS and C/C++ projects, with
+semantic navigation over MCP switchable on and off, are committed under
 [`configs/cli_agents/`](configs/cli_agents/README.md) together with the
 supported CLI versions, an end-to-end test on the handwritten ArkTS fixture,
 and an opt-in smoke test against the real binaries.
@@ -459,6 +480,7 @@ See `eval.py::ExploreEvaluator` and `quality/bench_metrics.py` for exact formula
 SWE-Explore-Bench/
 |-- bench_build.py              # Build line-level ground truth from trajectories
 |-- build_commit_map.py         # Build instance -> base_commit mappings
+|-- build_language_bench.py     # Select one language's instances from the released bench
 |-- fetch_repos.py              # Download repository snapshots
 |-- line_refine.py              # LLM-based line-range refinement
 |-- eval.py                     # ExploreEvaluator and metrics

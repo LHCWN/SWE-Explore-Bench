@@ -1,0 +1,34 @@
+{
+  "permission": {
+    "read": "allow",
+    "external_directory": "deny",
+    "question": "deny",
+    "edit": "deny",
+    "bash": "deny"
+  },
+  "mcp": {
+    "serena": {
+      "type": "local",
+      "command": [
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide",
+        "--mode",
+        "planning",
+        "--mode",
+        "no-onboarding",
+        "--enable-web-dashboard",
+        "false",
+        "--enable-gui-log-window",
+        "false",
+        "--project-from-cwd"
+      ],
+      "environment": {
+        "SERENA_HOME": "{env:SWE_EXPLORE_SERENA_HOME}"
+      },
+      "enabled": true,
+      "timeout": 60000
+    }
+  }
+}

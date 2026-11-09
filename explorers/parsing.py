@@ -15,7 +15,7 @@ from .base import ContextRegion, ExplorerResult
 logger = logging.getLogger(__name__)
 
 # File extensions for fallback regex; longer extensions precede their prefixes.
-_SRC_EXTS = r"json5|json|jsx|js|tsx|ts|cpp|c|py|java|go|rs|h|rb|php|md|txt|toml|yaml|yml|rst|cfg|ini|sh|ets"
+_SRC_EXTS = r"json5|json|jsx|js|tsx|ts|hpp|hxx|hh|cpp|cxx|cc|c|py|java|go|rs|h|rb|php|md|txt|toml|yaml|yml|rst|cfg|ini|sh|ets"
 
 # Known absolute prefixes that agents may return (e.g. /opt/swe-explore/data/repos/xxx/...)
 _ABS_REPO_PATTERN = re.compile(

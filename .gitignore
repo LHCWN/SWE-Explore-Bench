@@ -50,3 +50,7 @@ scripts/compare_bench_spans.py
 !configs/cli_agents/opencode/arkts-no-mcp/opencode.json
 !configs/cli_agents/deveco/arkts/deveco.json
 !configs/cli_agents/deveco/arkts-no-mcp/deveco.json
+!configs/cli_agents/opencode/cpp/opencode.json
+!configs/cli_agents/opencode/cpp-no-mcp/opencode.json
+!configs/cli_agents/deveco/cpp/deveco.json
+!configs/cli_agents/deveco/cpp-no-mcp/deveco.json
