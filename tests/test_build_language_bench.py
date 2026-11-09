@@ -1,7 +1,12 @@
 """The per-language benchmark is built from the released file without network access."""
-import pytest
+import json
 
-from build_language_bench import LANGUAGE_REPOS, attach_issues, get_org_repo, select_instances
+import pytest
+from typer.testing import CliRunner
+
+from build_language_bench import (
+    LANGUAGE_REPOS, app, attach_issues, get_org_repo, select_instances,
+)
 
 
 @pytest.mark.parametrize("instance_id,expected", [
@@ -36,3 +41,12 @@ def test_issue_text_is_attached_and_missing_text_is_reported():
     attached, missing = attach_issues(instances, {"a__b-1": "bug", "a__b-3": "  "})
     assert attached == [{"instance_id": "a__b-1", "ground_truth": {}, "problem_statement": "bug"}]
     assert missing == ["a__b-2", "a__b-3"]
+
+
+def test_build_fails_without_writing_when_nothing_is_selected(tmp_path):
+    bench = tmp_path / "bench.jsonl"
+    bench.write_text(json.dumps({"instance_id": "pydata__xarray-4629"}) + "\n", encoding="utf-8")
+    output = tmp_path / "out.jsonl"
+    result = CliRunner().invoke(app, [str(bench), "--language", "cpp", "-o", str(output)])
+    assert result.exit_code == 1
+    assert not output.exists()

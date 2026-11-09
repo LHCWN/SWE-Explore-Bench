@@ -14,7 +14,6 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import typer
-from datasets import load_dataset
 from rich.console import Console
 
 console = Console()
@@ -62,6 +61,8 @@ def attach_issues(
 
 
 def load_multilingual_issues() -> dict[str, str]:
+    from datasets import load_dataset
+
     console.print("[cyan]Loading SWE-bench Multilingual dataset...[/cyan]")
     ds = load_dataset("SWE-bench/SWE-bench_Multilingual", split="test")
     return {item["instance_id"]: item["problem_statement"] for item in ds}
@@ -88,8 +89,13 @@ def build(
         rows = [json.loads(line) for line in f if line.strip()]
     instances = select_instances(rows, LANGUAGE_REPOS[language])
     console.print(f"[green]Selected {len(instances)} of {len(rows)} instances[/green]")
-    for repo, count in sorted(Counter(get_org_repo(i["instance_id"]) for i in instances).items()):
-        console.print(f"  {repo}: {count}")
+    counts = Counter(get_org_repo(i["instance_id"]) for i in instances)
+    for repo in LANGUAGE_REPOS[language]:
+        line = f"  {repo}: {counts[repo]}"
+        console.print(line if counts[repo] else f"[yellow]{line}[/yellow]")
+    if not instances:
+        console.print(f"[red]No {language} instances in {bench}.[/red]")
+        raise typer.Exit(1)
 
     attached, missing = attach_issues(instances, load_multilingual_issues())
     if missing:
