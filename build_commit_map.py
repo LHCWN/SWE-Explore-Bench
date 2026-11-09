@@ -4,6 +4,7 @@
 数据来源：
 - SWE-bench Verified (princeton-nlp/SWE-bench_Verified): mini-* 轨迹
 - SWE-rebench (nebius/SWE-rebench): openhands-* 轨迹
+- SWE-bench Multilingual (SWE-bench/SWE-bench_Multilingual): 多语言实例
 """
 
 import json
@@ -44,11 +45,27 @@ def load_swe_rebench() -> dict[str, str]:
     return mapping
 
 
+def load_swebench_multilingual() -> dict[str, str]:
+    """加载 SWE-bench Multilingual 数据集，返回 instance_id -> base_commit 映射"""
+    console.print("[cyan]Loading SWE-bench Multilingual dataset...[/cyan]")
+    ds = load_dataset("SWE-bench/SWE-bench_Multilingual", split="test")
+    mapping: dict[str, str] = {}
+    for item in ds:
+        instance_id = item["instance_id"]
+        base_commit = item["base_commit"]
+        mapping[instance_id] = base_commit
+    console.print(f"[green]Loaded {len(mapping)} instances from SWE-bench Multilingual[/green]")
+    return mapping
+
+
 @app.command()
 def build(
     output: Path = typer.Option(Path("commit_map.json"), "-o", "--output", help="输出 JSON 文件路径"),
     include_verified: bool = typer.Option(True, "--verified/--no-verified", help="包含 SWE-bench Verified"),
     include_rebench: bool = typer.Option(True, "--rebench/--no-rebench", help="包含 SWE-rebench"),
+    include_multilingual: bool = typer.Option(
+        False, "--multilingual/--no-multilingual", help="包含 SWE-bench Multilingual"
+    ),
 ):
     """
     构建 instance_id -> base_commit 的映射并保存为 JSON 文件。
@@ -69,6 +86,11 @@ def build(
             progress.add_task("Loading SWE-rebench...", total=None)
             rebench_map = load_swe_rebench()
             all_mappings.update(rebench_map)
+
+        if include_multilingual:
+            progress.add_task("Loading SWE-bench Multilingual...", total=None)
+            multilingual_map = load_swebench_multilingual()
+            all_mappings.update(multilingual_map)
 
     # 保存到 JSON
     output.parent.mkdir(parents=True, exist_ok=True)

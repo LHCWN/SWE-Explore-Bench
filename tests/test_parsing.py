@@ -54,6 +54,18 @@ class RelevantFilesTest(unittest.TestCase):
                     results = self.parse(location, structured)
                     self.assert_region(results, path, start, end)
 
+    def test_c_family_locations(self):
+        names = ('src/format.cc', 'src/a.cxx', 'include/fmt/core.hpp',
+                 'include/b.hh', 'include/c.hxx', 'src/jv.c', 'src/jv.h')
+        for name in names:
+            file = self.root / name
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text('// C++ source\n' * 30, encoding="utf-8")
+        for structured in (True, False):
+            for name in names:
+                with self.subTest(name=name, structured=structured):
+                    self.assert_region(self.parse(f'{name}:3-7', structured), name, 3, 7)
+
     def test_range_whitespace(self):
         for structured in (True, False):
             for location in ('Index.ets: 10-20', 'Index.ets:10 - 20',

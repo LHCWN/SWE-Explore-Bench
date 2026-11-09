@@ -1,9 +1,11 @@
 # OpenCode and DevEco Code evaluation profiles
 
 Committed, credential-free configurations for running the `opencode` and
-`deveco` explorers against ArkTS / OpenHarmony projects. Point the runner's
-config-dir flag at one of these directories and every reproduction uses the
-same model wiring, the same read-only permissions, and the same MCP setup.
+`deveco` explorers against ArkTS / OpenHarmony projects (`arkts`) and C / C++
+projects (`cpp`). Point the runner's config-dir flag at one of
+these directories and every reproduction uses the same read-only permissions
+and the same MCP setup. The `arkts` profiles also carry the model wiring; the
+`cpp` profile leaves the provider and model to you (see "Model wiring").
 
 ```text
 configs/cli_agents/
@@ -12,14 +14,21 @@ configs/cli_agents/
 |-- opencode/arkts-no-mcp/opencode.json          # semantic navigation over MCP: off
 |-- deveco/arkts/deveco.json                     # same profile, DevEco Code filename
 |-- deveco/arkts/checkout/.serena/project.yml
-`-- deveco/arkts-no-mcp/deveco.json
+|-- deveco/arkts-no-mcp/deveco.json
+`-- {opencode,deveco}/cpp, cpp-no-mcp            # C / C++: no provider or model
 ```
 
 DevEco Code is a HarmonyOS-oriented fork of OpenCode, so the two CLIs share
-one configuration schema. The four JSON files differ only in filename and in
-the `mcp.serena.enabled` flag; `tests/test_cli_agent_profiles.py` enforces
-that. `.gitignore` admits exactly these four JSON paths, so a private profile
-placed anywhere else, including beside them, stays ignored.
+one configuration schema. The JSON files differ only in filename and in the
+`mcp.serena.enabled` flag. The `cpp` profile is smaller: no `provider`,
+`model` or `tools`, just the five permissions that keep a headless run
+read-only and free of prompts (`read` allowed; `edit`, `bash`,
+`external_directory` and `question` denied) and the same Serena entry as
+`arkts`, which `cpp-no-mcp` omits instead of disabling. The language server is
+named by `cpp`'s `checkout/.serena/project.yml`.
+`tests/test_cli_agent_profiles.py` enforces both. `.gitignore` admits exactly
+these JSON paths, so a private profile placed anywhere else, including beside
+them, stays ignored.
 
 A profile directory may hold a `checkout/` subdirectory. The explorer copies
 its files into the repository before each run, skipping any the checkout
@@ -44,8 +53,9 @@ The committed profiles additionally leave nothing at `ask`.
 
 ## Model wiring
 
-The provider is the repository's LiteLLM proxy (`configs/litellm_proxy.yaml`),
-read from the same variables the academic agents use:
+In the `arkts` profiles the provider is the repository's LiteLLM proxy
+(`configs/litellm_proxy.yaml`), read from the same variables the academic
+agents use:
 
 | Variable | Used as |
 | --- | --- |
@@ -124,7 +134,7 @@ OpenCode's `--auto` only resolves rules that would otherwise ask; explicit
 
 ## Semantic navigation over MCP
 
-The `arkts` variant enables [Serena](https://github.com/oraios/serena), an
+The MCP-on variants (`arkts`, `cpp`) enable [Serena](https://github.com/oraios/serena), an
 LSP-backed code-navigation MCP server, launched as
 `serena start-mcp-server --context ide --mode planning --mode no-onboarding
 --enable-web-dashboard false --enable-gui-log-window false
@@ -140,7 +150,8 @@ without its own project file would silently activate SWE-Explore-Bench
 itself and every navigation call would return nothing. The MCP-on profiles
 therefore carry `checkout/.serena/project.yml`, which the explorer places
 into the checkout for each run (see the top of this file). It names the
-TypeScript server, sets `read_only: true`, and excludes the editing tools.
+language server (`typescript` for `arkts`, `cpp` for `cpp`), sets
+`read_only: true`, and excludes the editing tools.
 Serena writes its language-server cache under `.serena/` in the checkout,
 which the tests exclude from the "unchanged" check.
 
@@ -148,11 +159,14 @@ Serena installs language servers under its home directory, and the explorer
 gives every run a fresh `HOME`. The profiles pass
 `SERENA_HOME={env:SWE_EXPLORE_SERENA_HOME}` to the server so that cache can
 persist: export `SWE_EXPLORE_SERENA_HOME` to a directory of your choice
-before a benchmark run, or Serena reinstalls the TypeScript server for every
+before a benchmark run, or Serena reinstalls the language server for every
 instance. The smoke test sets it to one directory for the whole session.
 
 Serena has no ArkTS language server; `.ets` files fall outside its symbol
-index, which is exactly the question the comparison below answers. Swap the
+index, which is exactly the question the comparison below answers. For
+`cpp`, Serena's clangd server indexes the sources. It runs without a
+`compile_commands.json`, which benchmark snapshots do not have, so symbol
+resolution across headers is best-effort. Swap the
 `mcp.serena` entry for another server to test a different navigation tool
 and keep the `arkts-no-mcp` variant as the control.
 
@@ -176,14 +190,23 @@ uv run python eval_runner.py \
   --top-k 5 --output "results/{explorer}/top{k}.jsonl"
 ```
 
-Use the `arkts-no-mcp` directories for the control arm.
+For C / C++, build `bench.cpp.jsonl`, `commit_map.json` and `repos/` as the
+top-level README's "C/C++ subset" describes, then point the config-dir flag at
+`configs/cli_agents/<cli>/cpp`; no `--issue-map` is needed. That profile only
+makes the run read-only, free of prompts, and enables Serena. The explorer runs with an empty
+`HOME`, so it never reads your own CLI config: copy the directory, add `model`
+and `provider` to the copy (the `arkts` file is a working example, and
+"Read-only permissions" lists what it denies beyond `edit` and `bash`), and
+point the config-dir flag at the copy. `.gitignore` keeps it out of the repository.
+
+Use the `-no-mcp` directories for the control arm.
 
 ## Tests
 
 `tests/test_cli_agent_profiles.py` checks the committed files: valid JSON,
 no literal credentials, bash denied, editing tools off for both native and
-Serena tools, no `ask` rules, and the two variants differing only in the MCP
-flag.
+Serena tools, no `ask` rules, the two variants differing only in MCP,
+and `cpp` keeping the `arkts` Serena command.
 
 `tests/test_cli_agent_arkts_e2e.py` drives both explorers end to end against
 the handwritten OpenHarmony fixture in `tests/fixtures/arkts_app`.
